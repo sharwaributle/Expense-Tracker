@@ -22,7 +22,7 @@ app.config.update(
 )
 DB_PATH = os.path.join(os.path.dirname(__file__), "expenses.db")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant").strip()
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 CATEGORIES = ["Food", "Transport", "Housing", "Utilities", "Health", "Shopping", "Entertainment", "Other"]
@@ -717,7 +717,7 @@ def api_chat():
         client = Groq(api_key=GROQ_API_KEY)
         chat_completion = client.chat.completions.create(
             messages=messages,
-            model=GROQ_MODEL if GROQ_MODEL else "llama-3.3-70b-versatile",
+            model=GROQ_MODEL if GROQ_MODEL else "llama-3.1-8b-instant",
             max_tokens=400,
             temperature=0.4,
         )
