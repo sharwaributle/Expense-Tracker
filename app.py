@@ -676,7 +676,6 @@ def api_chat():
     )
     db.commit()
 
-    # User context calculation
     user_row = db.execute("SELECT monthly_income FROM users WHERE id = ?", (user_id,)).fetchone()
     monthly_income = float(user_row["monthly_income"]) if user_row and user_row["monthly_income"] else 25000.0
 
@@ -708,14 +707,13 @@ def api_chat():
         "SELECT role, content FROM chat_messages WHERE user_id = ? ORDER BY id DESC LIMIT 10",
         (user_id,),
     ).fetchall()
-    
+
     messages = [{"role": "system", "content": system_prompt}]
     for row in reversed(recent_history):
         role = "assistant" if row["role"] == "assistant" else "user"
         messages.append({"role": role, "content": row["content"]})
 
     try:
-        # Use official Groq SDK (no manually broken URLs)
         client = Groq(api_key=GROQ_API_KEY)
         chat_completion = client.chat.completions.create(
             messages=messages,
@@ -734,7 +732,6 @@ def api_chat():
     db.commit()
 
     return jsonify({"reply": reply})
-
 if __name__ == "__main__":
     with app.app_context():
         init_db()
