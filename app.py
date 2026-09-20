@@ -8,7 +8,7 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, g, Response
 from werkzeug.security import generate_password_hash, check_password_hash
-
+from groq import Groq
 load_dotenv()
 
 app = Flask(__name__)
@@ -660,7 +660,7 @@ def clear_chat():
 @login_required
 def api_chat():
     if not GROQ_API_KEY:
-        return jsonify({"error": "GROQ_API_KEY is not configured on the server. Add it to your .env file."}), 500
+        return jsonify({"error": "GROQ_API_KEY is not configured on the server."}), 500
 
     data = request.get_json(force=True)
     user_message = (data.get("message") or "").strip()
@@ -676,7 +676,7 @@ def api_chat():
     )
     db.commit()
 
-    # Get user monthly income
+    # User context calculation
     user_row = db.execute("SELECT monthly_income FROM users WHERE id = ?", (user_id,)).fetchone()
     monthly_income = float(user_row["monthly_income"]) if user_row and user_row["monthly_income"] else 25000.0
 
@@ -693,15 +693,13 @@ def api_chat():
     ).fetchall()
     category_summary = ", ".join(f"{row['category']}: ₹{row['total']:.0f}" for row in by_category) or "no expenses logged yet"
 
-    # Strictly enforce Indian Rupees (₹) and clean conversational text
     system_prompt = (
         "You are an expert personal finance assistant for an Indian expense tracker app. "
-        "Strict rules you MUST follow:\n"
-        "1. Always use Indian Rupees (₹) for all monetary amounts and budgets. NEVER use dollar ($) signs.\n"
-        "2. Answer in clear, professional English.\n"
-        "3. Keep answers concise, direct, and actionable.\n"
-        "4. Do NOT output raw Markdown tables or pipes. Use clean bullet points or short paragraphs instead.\n"
-        f"Context -> User Monthly Income: ₹{monthly_income:,.0f}. "
+        "Strict rules:\n"
+        "1. Always use Indian Rupees (₹) for money. Never use dollar ($).\n"
+        "2. Reply in professional, concise English.\n"
+        "3. Do not output raw Markdown tables or pipes. Use clean bullet points or short paragraphs.\n"
+        f"Context -> Monthly Income: ₹{monthly_income:,.0f}. "
         f"Current month total spending: ₹{month_total:,.0f}. "
         f"Category spending so far: {category_summary}."
     )
@@ -710,24 +708,23 @@ def api_chat():
         "SELECT role, content FROM chat_messages WHERE user_id = ? ORDER BY id DESC LIMIT 10",
         (user_id,),
     ).fetchall()
+    
     messages = [{"role": "system", "content": system_prompt}]
     for row in reversed(recent_history):
         role = "assistant" if row["role"] == "assistant" else "user"
         messages.append({"role": role, "content": row["content"]})
 
     try:
-        response = requests.post(
-            GROQ_URL,
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={"model": GROQ_MODEL, "messages": messages, "max_tokens": 500, "temperature": 0.4},
-            timeout=30,
+        # Use official Groq SDK (no manually broken URLs)
+        client = Groq(api_key=GROQ_API_KEY)
+        chat_completion = client.chat.completions.create(
+            messages=messages,
+            model=GROQ_MODEL if GROQ_MODEL else "llama-3.3-70b-versatile",
+            max_tokens=400,
+            temperature=0.4,
         )
-        response.raise_for_status()
-        reply = response.json()["choices"][0]["message"]["content"].strip()
-    except requests.exceptions.RequestException as exc:
+        reply = chat_completion.choices[0].message.content.strip()
+    except Exception as exc:
         reply = f"Sorry, I couldn't reach the chat service right now ({exc})."
 
     db.execute(
